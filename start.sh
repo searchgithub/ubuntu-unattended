@@ -95,11 +95,33 @@ source /etc/profile
 ##echo DNS=192.168.1.8 >>/etc/systemd/resolved.conf
 ##systemctl restart systemd-resolved.service
 chmod +x /etc/rc.local
-netplan apply
+##netplan apply
 # 安装docker 使用 WARNING: No swap limit support
 sed -i 's/GRUB_CMDLINE_LINUX=""/GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"/' /etc/default/grub
 update-grub
  apt update -y
 systemctl stop ufw.service
 systemctl disable ufw.service
+#add account jim
+useradd -m -G cdrom,sudo,dip,plugdev,lxd -s /bin/bash jim
+printf "jim\njim" | passwd jim
+
+#enable all dhcp
+netcfgfile=$(grep -l 'renderer: networkd' /etc/netplan/*|head -1)
+ip a|grep '^[0-9]:'|awk -F: '{print $2}'|tr -d ' '|grep -vw lo|while read card
+do
+  cnt=$(grep -c $card $netcfgfile)
+  if [ $cnt -eq 0 ]; then
+    echo "    ${card}:" >> $netcfgfile
+    echo "      dhcp4: yes" >> $netcfgfile
+  fi
+done
+netplan apply
+ip a|grep -E 'enp|192\.|10\.'|awk '{print $2}'|xargs -n2
+
+cnt=$(grep '^%sudo' /etc/sudoers|grep -c NOPASSWD)
+if [ $cnt -eq 0 ]; then
+  sed -i 's#^%sudo.*$#%sudo ALL=(ALL:ALL) NOPASSWD:ALL#' /etc/sudoers
+fi
+
 rm -rf /root/start.sh
