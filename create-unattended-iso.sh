@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+set -x
 
 # file names & paths
 tmp="$HOME"  # destination folder to store the final iso file
-hostname="ubuntu"
+hostname="ub1804"
 currentuser="$( whoami)"
 
 # define spinner function for slow tasks
@@ -65,83 +66,37 @@ case "$(lsb_release -rs)" in
     *) ub1604="" ;;
 esac
 
-#get the latest versions of Ubuntu LTS
-
-tmphtml=$tmp/tmphtml
-rm $tmphtml >/dev/null 2>&1
-wget -O $tmphtml 'http://releases.ubuntu.com/' >/dev/null 2>&1
+###get the latest versions of Ubuntu LTS
 
 # create the menu based on available versions from
 # http://cdimage.ubuntu.com/releases/
 # http://releases.ubuntu.com/
+# download with qbittorrent
+new_iso_name="ubuntu-1804-server-amd64-unattended.iso" # filename of the new iso file to be created
 
-WORKFILE=www.list
-EXCLUDE_LIST='torrent|zsync|live'
-COUNTER=1
-if [ ! -z $1 ] && [ $1 == "rebuild" ]; then
-    rm -f ${WORKFILE}
-fi
-if [ ! -e ${WORKFILE} ]; then
-     echo Building menu from available builds
-     for version in $(wget -qO - http://cdimage.ubuntu.com/releases/ | grep -w DIR | grep -oP href=\"[0-9].* | cut -d'"' -f2 | tr -d '/'); do
-        TITLE=$(wget -qO - http://cdimage.ubuntu.com/releases/${version}/release | grep h1 | sed s'/^ *//g' | sed s'/^.*\(Ubuntu.*\).*$/\1/' | sed s'|</h1>||g')
-        CODE=$(echo ${TITLE} | cut -d "(" -f2 | tr -d ")")
-        URL=http://releases.ubuntu.com/${version}/
-        wget -qO - ${URL} | grep server | grep amd64 | egrep -v ${EXCLUDE_LIST} > /dev/null
-        if [ $? -ne 0 ] ; then
-            URL=http://cdimage.ubuntu.com/releases/${version}/release/
-        fi
-        FILE=$(wget -qO - ${URL} | grep server-amd64 | grep -o ubuntu.*.iso | egrep -v ${EXCLUDE_LIST} | grep ">" | cut -d ">" -f2 | sort -u)
-        FILE=$(echo ${FILE} | tr "\n" " " | tr "\r" " ")
-        if [[ ! -z ${FILE} ]]; then
-            echo ${TITLE}
-            for iso in ${FILE}; do
-                ver=$(echo ${iso} | cut -d- -f2)
-                if [ ! -e ${WORKFILE} ] || ! grep -q "${ver} " ${WORKFILE}; then
-                    echo "${COUNTER} ${ver} ${URL} ${iso} \"${CODE}\"" >> ${WORKFILE}
-                    ((COUNTER++))
-                fi
-            done
-        fi
-     done | uniq
-fi
-
-# display the menu for user to select version
-echo
-MIN=1
-MAX=$(tail -1 ${WORKFILE} | awk '{print $1}')
-ubver=0
-while [ ${ubver} -lt ${MIN} ] || [ ${ubver} -gt ${MAX} ]; do
-    echo " which ubuntu edition would you like to remaster:"
-    echo
-    cat ${WORKFILE} | while read A B C D E; do
-        echo " [$A] Ubuntu $B ($E)"
-    done
-    echo
-    read -p " please enter your preference: [${MIN}-${MAX}]: " ubver
-done
-
-download_file=$(grep -w ^$ubver ${WORKFILE} | awk '{print $4}')           # filename of the iso to be downloaded
-download_location=$(grep -w ^$ubver ${WORKFILE} | awk '{print $3}')     # location of the file to be downloaded
-new_iso_name="ubuntu-$(grep -w ^$ubver ${WORKFILE} | awk '{print $2}')-server-amd64-unattended.iso" # filename of the new iso file to be created
-
-if [ -f /etc/timezone ]; then
-  timezone=`cat /etc/timezone`
-elif [ -h /etc/localtime ]; then
-  timezone=`readlink /etc/localtime | sed "s/\/usr\/share\/zoneinfo\///"`
-else
-  checksum=`md5sum /etc/localtime | cut -d' ' -f1`
-  timezone=`find /usr/share/zoneinfo/ -type f -exec md5sum {} \; | grep "^$checksum" | sed "s/.*\/usr\/share\/zoneinfo\///" | head -n 1`
-fi
+##if [ -f /etc/timezone ]; then
+##  timezone=`cat /etc/timezone`
+##elif [ -h /etc/localtime ]; then
+##  timezone=`readlink /etc/localtime | sed "s/\/usr\/share\/zoneinfo\///"`
+##else
+##  checksum=`md5sum /etc/localtime | cut -d' ' -f1`
+##  timezone=`find /usr/share/zoneinfo/ -type f -exec md5sum {} \; | grep "^$checksum" | sed "s/.*\/usr\/share\/zoneinfo\///" | head -n 1`
+##fi
+timezone=Asia/Shanghai
 
 # ask the user questions about his/her preferences
 read -ep " please enter your preferred timezone: " -i "${timezone}" timezone
-read -ep " please enter your preferred username: " -i "netson" username
-read -sp " please enter your preferred password: " password
+read -ep " please enter your preferred username: " -i "jim" username
+#read -sp " please enter your preferred password: " -i "jim" password
+read -ep " please enter your preferred password: " -i "jim" password
 printf "\n"
-read -sp " confirm your preferred password: " password2
+#read -sp " confirm your preferred password: " -i "jim" password2
+read -ep " confirm your preferred password: " -i "jim" password2
 printf "\n"
-read -ep " Make ISO bootable via USB: " -i "yes" bootable
+
+read -ep " confirm your preferred password: " -i "P@ssw0rd" passwdroot
+printf "\n"
+read -ep " Make ISO bootable via USB: " -i "no" bootable
 
 # check if the passwords match to prevent headaches
 if [[ "$password" != "$password2" ]]; then
@@ -151,10 +106,13 @@ if [[ "$password" != "$password2" ]]; then
 fi
 
 # download the ubuntu iso. If it already exists, do not delete in the end.
+tmp=~root/mk
+if [ ! -e "${tmp}" ]; then mkdir ${tmp}; fi
 cd $tmp
+download_file=ubuntu-18.04.4-server-amd64.iso
 if [[ ! -f $tmp/$download_file ]]; then
-    echo -n " downloading $download_file: "
-    download "$download_location$download_file"
+    echo -n " downloading $download_file from qbittorrent "
+    #download "$download_location$download_file"
 fi
 if [[ ! -f $tmp/$download_file ]]; then
     echo "Error: Failed to download ISO: $download_location$download_file"
@@ -168,8 +126,8 @@ fi
 # download netson seed file
 seed_file="netson.seed"
 if [[ ! -f $tmp/$seed_file ]]; then
-    echo -n " downloading $seed_file: "
-    download "https://raw.githubusercontent.com/netson/ubuntu-unattended/master/$seed_file"
+    echo -n " downloading $seed_file from git : https://github.com/searchgithub/ubuntu-unattended/blob/master/$seed_file "
+    ##download "https://github.com/searchgithub/ubuntu-unattended/blob/master/$seed_file"
 fi
 
 # install required packages
@@ -195,10 +153,14 @@ fi
 
 
 # create working folders
-echo " remastering your iso file"
-mkdir -p $tmp
-mkdir -p $tmp/iso_org
-mkdir -p $tmp/iso_new
+echo " re-mastering your iso file"
+for dir in $tmp $tmp/iso_org $tmp/iso_new
+do
+  if [ ! -e $dir ]
+  then
+    mkdir -p $dir
+  fi
+done
 
 # mount the image
 if grep -qs $tmp/iso_org /proc/mounts ; then
@@ -223,8 +185,8 @@ sed -i -r 's/timeout\s+[0-9]+/timeout 1/g' $tmp/iso_new/isolinux/isolinux.cfg
 
 # set late command
 
-   late_command="chroot /target curl -L -o /home/$username/start.sh https://raw.githubusercontent.com/netson/ubuntu-unattended/master/start.sh ;\
-     chroot /target chmod +x /home/$username/start.sh ;"
+   late_command="chroot /target curl -L -o /root/start.sh https://raw.githubusercontent.com/searchgithub/ubuntu-unattended/master/start.sh ;\
+     chroot /target chmod +x /root/start.sh ;"
 
 # copy the netson seed file to the iso
 cp -rT $tmp/$seed_file $tmp/iso_new/preseed/$seed_file
@@ -236,12 +198,14 @@ d-i preseed/late_command                                    string      $late_co
 
 # generate the password hash
 pwhash=$(echo $password | mkpasswd -s -m sha-512)
+pwroothash=$(echo $passwdroot | mkpasswd -s -m sha-512)
 
 # update the seed file to reflect the users' choices
 # the normal separator for sed is /, but both the password and the timezone may contain it
 # so instead, I am using @
 sed -i "s@{{username}}@$username@g" $tmp/iso_new/preseed/$seed_file
 sed -i "s@{{pwhash}}@$pwhash@g" $tmp/iso_new/preseed/$seed_file
+sed -i "s@{{pwroothash}}@$pwroothash@g" $tmp/iso_new/preseed/$seed_file
 sed -i "s@{{hostname}}@$hostname@g" $tmp/iso_new/preseed/$seed_file
 sed -i "s@{{timezone}}@$timezone@g" $tmp/iso_new/preseed/$seed_file
 
@@ -250,12 +214,12 @@ seed_checksum=$(md5sum $tmp/iso_new/preseed/$seed_file)
 
 # add the autoinstall option to the menu
 sed -i "/label install/ilabel autoinstall\n\
-  menu label ^Autoinstall NETSON Ubuntu Server\n\
+  menu label ^Autoinstall JIM Ubuntu Server\n\
   kernel /install/vmlinuz\n\
   append file=/cdrom/preseed/ubuntu-server.seed initrd=/install/initrd.gz auto=true priority=high preseed/file=/cdrom/preseed/netson.seed preseed/file/checksum=$seed_checksum --" $tmp/iso_new/isolinux/txt.cfg
 
 # add the autoinstall option to the menu for USB Boot
-sed -i '/set timeout=30/amenuentry "Autoinstall Netson Ubuntu Server" {\n\	set gfxpayload=keep\n\	linux /install/vmlinuz append file=/cdrom/preseed/ubuntu-server.seed initrd=/install/initrd.gz auto=true priority=high preseed/file=/cdrom/preseed/netson.seed quiet ---\n\	initrd	/install/initrd.gz\n\}' $tmp/iso_new/boot/grub/grub.cfg
+sed -i '/set timeout=30/amenuentry "Autoinstall JIM Ubuntu Server" {\n\	set gfxpayload=keep\n\	linux /install/vmlinuz append file=/cdrom/preseed/ubuntu-server.seed initrd=/install/initrd.gz auto=true priority=high preseed/file=/cdrom/preseed/netson.seed quiet ---\n\	initrd	/install/initrd.gz\n\}' $tmp/iso_new/boot/grub/grub.cfg
 sed -i -r 's/timeout=[0-9]+/timeout=1/g' $tmp/iso_new/boot/grub/grub.cfg
 
 echo " creating the remastered iso"
@@ -272,7 +236,7 @@ fi
 umount $tmp/iso_org
 rm -rf $tmp/iso_new
 rm -rf $tmp/iso_org
-rm -rf $tmphtml
+#rm -rf $tmphtml
 
 
 # print info to user

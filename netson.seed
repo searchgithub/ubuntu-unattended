@@ -1,3 +1,6 @@
+#jim.add1 by https://zhangguanzhang.github.io/2019/08/06/preseed/
+##d-i auto-install/enable boolean true
+
 # regional setting
 d-i debian-installer/language                               string      en_US:en
 d-i debian-installer/country                                string      US
@@ -5,6 +8,8 @@ d-i debian-installer/locale                                 string      en_US
 d-i debian-installer/splash                                 boolean     false
 d-i localechooser/supported-locales                         multiselect en_US.UTF-8
 d-i pkgsel/install-language-support                         boolean     true
+
+
 
 # keyboard selection
 d-i console-setup/ask_detect                                boolean     false
@@ -19,10 +24,12 @@ d-i netcfg/choose_interface                                 select      auto
 d-i netcfg/dhcp_timeout                                     string      5
 d-i netcfg/get_hostname                                     string      {{hostname}}
 d-i netcfg/get_domain                                       string      {{hostname}}
+##d-i netcfg/disable_autoconfig                               boolean     false
+
 
 # mirror settings
 d-i mirror/country                                          string      manual
-d-i mirror/http/hostname                                    string      archive.ubuntu.com
+d-i mirror/http/hostname                                    string      mirrors.aliyun.com
 d-i mirror/http/directory                                   string      /ubuntu
 d-i mirror/http/proxy                                       string
 
@@ -31,15 +38,29 @@ d-i time/zone                                               string      {{timezo
 d-i clock-setup/utc                                         boolean     false
 d-i clock-setup/ntp                                         boolean     true
 
+### Do NOT install on the USB stick(!)
+#
+# The Debian installer will install on the first disk it finds which can
+# sometimes be the USB stick itself. Work around this by rolling our own auto
+# detect logic which disallows installing on USB devices.
+d-i partman/early_command string \
+  USBDEV_LIST="$(mktemp)"; \
+  list-devices usb-partition | sed "s/\(.*\)./\1/" > "$USBDEV_LIST"; \
+  BOOTDEV="$(list-devices disk | grep -vf "$USBDEV_LIST" | head -n 1)"; \
+  debconf-set partman-auto/disk "$BOOTDEV"; \
+  debconf-set grub-installer/bootdev "$BOOTDEV"; \
+  while /bin/true; do sleep 0.01; rm -f /target/etc/grub.d/30_os-prober; done &
+
 # user account setup
-d-i passwd/root-login                                       boolean     false
+d-i passwd/root-login                                       boolean     true
+d-i passwd/root-password-crypted password                   password    {{pwroothash}}
 d-i passwd/make-user                                        boolean     true
 d-i passwd/user-fullname                                    string      {{username}}
 d-i passwd/username                                         string      {{username}}
 d-i passwd/user-password-crypted                            password    {{pwhash}}
 d-i passwd/user-uid                                         string
-d-i user-setup/allow-password-weak                          boolean     false
-d-i passwd/user-default-groups                              string      adm cdrom dialout lpadmin plugdev sambashare
+d-i user-setup/allow-password-weak                          boolean     true
+d-i passwd/user-default-groups                              string      adm cdrom dialout lpadmin plugdev sambashare sudo
 d-i user-setup/encrypt-home                                 boolean     false
 
 # configure apt
@@ -47,12 +68,15 @@ d-i apt-setup/restricted                                    boolean     true
 d-i apt-setup/universe                                      boolean     true
 d-i apt-setup/backports                                     boolean     true
 d-i apt-setup/services-select                               multiselect security
-d-i apt-setup/security_host                                 string      security.ubuntu.com
+d-i apt-setup/security_host                                 string      mirrors.aliyun.com
 d-i apt-setup/security_path                                 string      /ubuntu
 tasksel tasksel/first                                       multiselect Basic Ubuntu server
 d-i pkgsel/upgrade                                          select      safe-upgrade
 d-i pkgsel/update-policy                                    select      none
 d-i pkgsel/updatedb                                         boolean     true
+
+d-i pkgsel/include string openssh-server openssh-client wget ntp
+
 
 # disk partitioning
 d-i partman/confirm_write_new_label                         boolean     true
@@ -60,15 +84,16 @@ d-i partman/choose_partition                                select      finish
 d-i partman/confirm_nooverwrite                             boolean     true
 d-i partman/confirm                                         boolean     true
 d-i partman-auto/purge_lvm_from_device                      boolean     true
-d-i partman-lvm/device_remove_lvm                           boolean     true
-d-i partman-lvm/confirm                                     boolean     true
-d-i partman-lvm/confirm_nooverwrite                         boolean     true
-d-i partman-auto-lvm/no_boot                                boolean     true
+##d-i partman-lvm/device_remove_lvm                           boolean     true
+##d-i partman-lvm/confirm                                     boolean     true
+##d-i partman-lvm/confirm_nooverwrite                         boolean     true
+##d-i partman-auto-lvm/no_boot                                boolean     true
 d-i partman-md/device_remove_md                             boolean     true
 d-i partman-md/confirm                                      boolean     true
 d-i partman-md/confirm_nooverwrite                          boolean     true
-d-i partman-auto/method                                     string      lvm
-d-i partman-auto-lvm/guided_size                            string      max
+d-i partman-auto/method                                     string      regular
+d-i partman-auto/disk                                       string      /dev/sda
+##d-i partman-auto-lvm/guided_size                          string      max
 d-i partman-partitioning/confirm_write_new_label            boolean     true
 
 # grub boot loader

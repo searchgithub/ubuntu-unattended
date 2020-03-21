@@ -1,13 +1,7 @@
 #!/bin/bash
-set -e
-
-# set defaults
-default_hostname="$(hostname)"
-default_domain="netson.local"
-default_puppetmaster="foreman.netson.nl"
-tmp="/root/"
-
-clear
+# ubuntu18.sh
+##vi ubuntu18.sh
+###############################################set conf#################################################
 
 # check for root privilege
 if [ "$(id -u)" != "0" ]; then
@@ -16,131 +10,96 @@ if [ "$(id -u)" != "0" ]; then
    exit 1
 fi
 
-# define download function
-# courtesy of http://fitnr.com/showing-file-download-progress-using-wget.html
-download()
-{
-    local url=$1
-    echo -n "    "
-    wget --progress=dot $url 2>&1 | grep --line-buffered "%" | \
-        sed -u -e "s,\.,,g" | awk '{printf("\b\b\b\b%4s", $2)}'
-    echo -ne "\b\b\b\b"
-    echo " DONE"
-}
+#set ulimit
+echo \#\!/bin/bash >> /etc/rc.local
+echo "ulimit -SHn 1024000" >> /etc/rc.local
+cat >> /etc/security/limits.conf << EOF
+ *           soft   nofile       1024000
+ *           hard   nofile       1024000
+ *           soft   nproc        1024000
+ *           hard   nproc        1024000
+EOF
 
-# determine ubuntu version
-ubuntu_version=$(lsb_release -cs)
+# set max service processes
 
-# check for interactive shell
-if ! grep -q "noninteractive" /proc/cmdline ; then
-    stty sane
+cat >> /etc/systemd/system.conf << EOF
+DefaultLimitNOFILE=1024000
+DefaultLimitNPROC=1024000
+EOF
 
-    # ask questions
-    read -ep " please enter your preferred hostname: " -i "$default_hostname" hostname
-    read -ep " please enter your preferred domain: " -i "$default_domain" domain
-
-    # ask whether to add puppetlabs repositories
-    while true; do
-        read -p " do you wish to add the latest puppet repositories from puppetlabs? [y/n]: " yn
-        case $yn in
-            [Yy]* ) include_puppet_repo=1
-                    puppet_deb="puppetlabs-release-"$ubuntu_version".deb"
-                    break;;
-            [Nn]* ) include_puppet_repo=0
-                    puppet_deb=""
-                    puppetmaster="puppet"
-                    break;;
-            * ) echo " please answer [y]es or [n]o.";;
-        esac
-    done
-
-    if [[ include_puppet_repo ]] ; then
-        # ask whether to setup puppet agent or not
-        while true; do
-            read -p " do you wish to setup the puppet agent? [y/n]: " yn
-            case $yn in
-                [Yy]* ) setup_agent=1
-                        read -ep " please enter your puppet master: " -i "$default_puppetmaster" puppetmaster
-                        break;;
-                [Nn]* ) setup_agent=0
-                        puppetmaster="puppet"
-                        break;;
-                * ) echo " please answer [y]es or [n]o.";;
-            esac
-        done
-    fi
-
-fi
-
-# print status message
-echo " preparing your server; this may take a few minutes ..."
-
-# set fqdn
-fqdn="$hostname.$domain"
-
-# update hostname
-echo "$hostname" > /etc/hostname
-sed -i "s@ubuntu.ubuntu@$fqdn@g" /etc/hosts
-sed -i "s@ubuntu@$hostname@g" /etc/hosts
-hostname "$hostname"
-
-# update repos
-apt-get -y update
-apt-get -y upgrade
-apt-get -y dist-upgrade
-apt-get -y autoremove
-apt-get -y purge
-
-# install puppet
-if [[ include_puppet_repo -eq 1 ]]; then
-    # install puppet repo
-    wget https://apt.puppetlabs.com/$puppet_deb -O $tmp/$puppet_deb
-    dpkg -i $tmp/$puppet_deb
-    apt-get -y update
-    rm $tmp/$puppet_deb
-    
-    # check to install puppet agent
-    if [[ setup_agent -eq 1 ]] ; then
-        # install puppet
-        apt-get -y install puppet
-
-        # set puppet master settings
-        sed -i "s@\[master\]@\
-# configure puppet master\n\
-server=$puppetmaster\n\
-report=true\n\
-pluginsync=true\n\
-\n\
-\[master\]@g" /etc/puppet/puppet.conf
-
-        # remove the deprecated template dir directive from the puppet.conf file
-        sed -i "/^templatedir=/d" /etc/puppet/puppet.conf
-
-        # download the finish script if it doesn't yet exist
-        if [[ ! -f $tmp/finish.sh ]]; then
-            echo -n " downloading finish.sh: "
-            cd $tmp
-            download "https://raw.githubusercontent.com/netson/ubuntu-unattended/master/finish.sh"
-        fi
-
-        # set proper permissions on finish script
-        chmod +x $tmp/finish.sh
-
-        # connect to master and ensure puppet is always the latest version
-        echo " connecting to puppet master to request new certificate"
-        echo " please sign the certificate request on your puppet master ..."
-        puppet agent --waitforcert 60 --test
-        echo " once you've signed the certificate, please run finish.sh from your home directory"
-
-    fi
-
-fi
-
-# remove myself to prevent any unintended changes at a later stage
-rm $0
-
-# finish
-echo " DONE; rebooting ... "
-
-# reboot
-reboot
+#set max user processes
+#set ssh
+sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
+#sed -i 's/#PermitRootLogin yes/#PermitRootLogin no/' /etc/ssh/sshd_config
+systemctl restart sshd
+#set sysctl
+true > /etc/sysctl.conf
+cat >> /etc/sysctl.conf << EOF
+ net.ipv4.ip_forward = 0
+ net.ipv4.conf.default.rp_filter = 1
+ net.ipv4.conf.default.accept_source_route = 0
+ kernel.sysrq = 0
+ kernel.core_uses_pid = 1
+ net.ipv4.tcp_syncookies = 1
+ fs.file-max = 1024000
+ fs.nr_open = 1024000
+ vm.swappiness = 0
+ vm.max_map_count = 2048000
+ vm.overcommit_memory = 1
+ kernel.sem =5010 641280 5010 128
+ kernel.pid_max = 4194303
+ kernel.msgmnb = 65536
+ kernel.msgmax = 65536
+ kernel.shmmax = 68719476736
+ kernel.shmall = 4294967296
+ net.ipv4.tcp_max_tw_buckets = 6000
+ net.ipv4.tcp_sack = 1
+ net.ipv4.tcp_window_scaling = 1
+ net.ipv4.tcp_mem = 786432 1697152 1945728
+ net.ipv4.tcp_rmem = 4096 87380 16777216
+ net.ipv4.tcp_wmem = 4096 65536 16777216
+ net.core.wmem_default = 8388608
+ net.core.rmem_default = 8388608
+ net.core.rmem_max = 16777216
+ net.core.wmem_max = 16777216
+ net.core.netdev_max_backlog = 2048000
+ net.core.somaxconn = 65535
+ net.ipv4.tcp_max_orphans = 3276800
+ net.ipv4.tcp_max_syn_backlog = 2048000
+ net.ipv4.tcp_mem = 94500000 915000000 927000000
+ net.ipv4.tcp_fin_timeout = 1
+ net.ipv4.tcp_keepalive_time = 1200
+ net.ipv4.ip_local_port_range = 1024 65535
+# net.ipv4.ip_local_reserved_ports = 8000-20000
+ net.ipv4.neigh.default.gc_stale_time=120
+ net.ipv4.conf.default.rp_filter=0
+ net.ipv4.conf.all.rp_filter=0
+ net.ipv4.conf.all.arp_announce=2
+ net.ipv4.conf.lo.arp_announce=2
+EOF
+/sbin/sysctl -p
+echo "sysctl set OK!!"
+#set profile
+cat >> /etc/profile << EOF
+ulimit -d unlimited
+ulimit -m unlimited
+ulimit -s unlimited
+ulimit -v unlimited
+ulimit -t unlimited
+ulimit -c unlimited
+EOF
+source /etc/profile
+#set dns
+##echo DNS=192.168.1.169 >>/etc/systemd/resolved.conf
+##echo DNS=192.168.1.8 >>/etc/systemd/resolved.conf
+##systemctl restart systemd-resolved.service
+chmod +x /etc/rc.local
+netplan apply
+# 安装docker 使用 WARNING: No swap limit support
+sed -i 's/GRUB_CMDLINE_LINUX=""/GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"/' /etc/default/grub
+update-grub
+ apt update -y
+systemctl stop ufw.service
+systemctl disable ufw.service
+rm -rf /root/start.sh
