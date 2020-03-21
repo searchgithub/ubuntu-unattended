@@ -86,24 +86,24 @@ timezone=Asia/Shanghai
 
 # ask the user questions about his/her preferences
 read -ep " please enter your preferred timezone: " -i "${timezone}" timezone
-##read -ep " please enter your preferred username: " -i "jim" username
+read -ep " please enter your preferred username: " -i "jim" username
 #read -sp " please enter your preferred password: " -i "jim" password
-##read -ep " please enter your preferred password: " -i "jim" password
-##printf "\n"
-###read -sp " confirm your preferred password: " -i "jim" password2
-##read -ep " confirm your preferred password: " -i "jim" password2
-##printf "\n"
+read -ep " please enter your preferred password: " -i "jim" password
+printf "\n"
+#read -sp " confirm your preferred password: " -i "jim" password2
+read -ep " confirm your preferred password: " -i "jim" password2
+printf "\n"
 
 read -ep " confirm your preferred account root password: " -i "root" passwdroot
 printf "\n"
 read -ep " Make ISO bootable via USB: " -i "no" bootable
 
-### check if the passwords match to prevent headaches
-##if [[ "$password" != "$password2" ]]; then
-##    echo " your passwords do not match; please restart the script and try again"
-##    echo
-##    exit
-##fi
+# check if the passwords match to prevent headaches
+if [[ "$password" != "$password2" ]]; then
+    echo " your passwords do not match; please restart the script and try again"
+    echo
+    exit
+fi
 
 # download the ubuntu iso. If it already exists, do not delete in the end.
 tmp=~root/mk
@@ -111,7 +111,8 @@ if [ ! -e "${tmp}" ]; then mkdir ${tmp}; fi
 cd $tmp
 download_file=ubuntu-18.04.4-server-amd64.iso
 if [[ ! -f $tmp/$download_file ]]; then
-    echo -n " downloading $download_file from qbittorrent "
+    echo -n " downloading $download_file from qbittorrent or "
+	echo -n " tuna:https://mirror.tuna.tsinghua.edu.cn/ubuntu-cdimage/releases/18.04.4/release/ubuntu-18.04.4-server-amd64.iso"
     #download "$download_location$download_file"
 fi
 if [[ ! -f $tmp/$download_file ]]; then
@@ -125,6 +126,9 @@ fi
 
 # download netson seed file
 seed_file="netson.seed"
+if [[ ! -f $tmp/$seed_file ]] && [[ -f $tmp/ubuntu-unattended/$seed_file ]]; then
+  ln $tmp/ubuntu-unattended/$seed_file $tmp/$seed_file
+fi
 if [[ ! -f $tmp/$seed_file ]]; then
     echo -n " downloading $seed_file from git : https://github.com/searchgithub/ubuntu-unattended/blob/master/$seed_file "
     ##download "https://github.com/searchgithub/ubuntu-unattended/blob/master/$seed_file"
@@ -197,14 +201,14 @@ echo "
 d-i preseed/late_command                                    string      $late_command" >> $tmp/iso_new/preseed/$seed_file
 
 # generate the password hash
-##pwhash=$(echo $password | mkpasswd -s -m sha-512)
+pwhash=$(echo $password | mkpasswd -s -m sha-512)
 pwroothash=$(echo $passwdroot | mkpasswd -s -m sha-512)
 
 # update the seed file to reflect the users' choices
 # the normal separator for sed is /, but both the password and the timezone may contain it
 # so instead, I am using @
-##sed -i "s@{{username}}@$username@g" $tmp/iso_new/preseed/$seed_file
-##sed -i "s@{{pwhash}}@$pwhash@g" $tmp/iso_new/preseed/$seed_file
+sed -i "s@{{username}}@$username@g" $tmp/iso_new/preseed/$seed_file
+sed -i "s@{{pwhash}}@$pwhash@g" $tmp/iso_new/preseed/$seed_file
 sed -i "s@{{pwroothash}}@$pwroothash@g" $tmp/iso_new/preseed/$seed_file
 sed -i "s@{{hostname}}@$hostname@g" $tmp/iso_new/preseed/$seed_file
 sed -i "s@{{timezone}}@$timezone@g" $tmp/iso_new/preseed/$seed_file
